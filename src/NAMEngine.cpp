@@ -1,32 +1,39 @@
 #include <NAM/get_dsp.h>
+#include <nlohmann/json.hpp>
 #include "NAMEngine.h"
-#include <fstream>
 
 NAMEngine::NAMEngine() = default;
 NAMEngine::~NAMEngine() = default;
 
 bool NAMEngine::loadModel(const void* data, size_t dataSize)
 {
+    if (data == nullptr || dataSize == 0)
+    {
+        juce::Logger::writeToLog("NAMEngine::loadModel: empty data");
+        return false;
+    }
+
     try
     {
-        // Write binary data to a temp file since NAM API loads from path
-        auto tempFile = juce::File::getSpecialLocation(
-                            juce::File::tempDirectory)
-                            .getChildFile("onedial_nam_" + juce::String(juce::Random::getSystemRandom().nextInt64()) + ".nam");
+        const auto* begin = static_cast<const char*>(data);
+        const auto* end   = begin + dataSize;
+        auto config = nlohmann::json::parse(begin, end);
 
+        auto newModel = nam::get_dsp(config);
+        if (newModel == nullptr)
         {
-            juce::FileOutputStream out(tempFile);
-            if (!out.openedOk())
-                return false;
-            out.write(data, dataSize);
+            juce::Logger::writeToLog("NAMEngine::loadModel: get_dsp returned null");
+            return false;
         }
 
-        bool result = loadModelFromFile(tempFile.getFullPathName());
-        tempFile.deleteFile();
-        return result;
+        model = std::move(newModel);
+        modelSampleRate = nam::get_sample_rate_from_nam_file(config);
+        model->prewarm();
+        return true;
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
+        juce::Logger::writeToLog(juce::String("NAMEngine::loadModel failed: ") + e.what());
         return false;
     }
 }
@@ -37,15 +44,18 @@ bool NAMEngine::loadModelFromFile(const juce::String& filePath)
     {
         auto newModel = nam::get_dsp(std::filesystem::path(filePath.toStdString()));
         if (newModel == nullptr)
+        {
+            juce::Logger::writeToLog("NAMEngine::loadModelFromFile: get_dsp returned null");
             return false;
+        }
 
         model = std::move(newModel);
         model->prewarm();
-
         return true;
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
+        juce::Logger::writeToLog(juce::String("NAMEngine::loadModelFromFile failed: ") + e.what());
         return false;
     }
 }
@@ -64,11 +74,8 @@ void NAMEngine::process(float* buffer, int numSamples)
     if (!isLoaded() || numSamples <= 0)
         return;
 
-    // NAM API expects NAM_SAMPLE** (pointer to array of channel pointers)
-    // We have mono, so one channel
     float* inputChannels[1] = {buffer};
-    float* outputChannels[1] = {buffer}; // in-place
-
+    float* outputChannels[1] = {buffer};
     model->process(inputChannels, outputChannels, numSamples);
 }
 
@@ -77,7 +84,13 @@ bool NAMEngine::isLoaded() const
     return model != nullptr;
 }
 
+double NAMEngine::getModelSampleRate() const
+{
+    return modelSampleRate;
+}
+
 void NAMEngine::reset()
 {
     model.reset();
+    modelSampleRate = -1.0;
 }

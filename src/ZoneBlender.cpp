@@ -14,29 +14,28 @@ void ZoneBlender::prepare(double sampleRate, int samplesPerBlock)
     for (auto& engine : namEngines)
         engine.prepare(sampleRate, samplesPerBlock);
 
+    // IRLoader::prepare() primes Convolution AND commits any pending IR that
+    // was queued before prepare was called. Must run after NAM prepare.
     for (auto& ir : irLoaders)
         ir.prepare(sampleRate, samplesPerBlock);
 }
 
 void ZoneBlender::releaseResources()
 {
-    for (auto& engine : namEngines)
-        engine.reset();
-
-    for (auto& ir : irLoaders)
-        ir.reset();
+    // Reset convolvers' internal state but DO NOT throw away the NAM models
+    // or the IR pending-data. Logic calls releaseResources between transport
+    // stops, and it would be wasteful (and buggy) to reload the models from
+    // scratch each time prepareToPlay fires again.
+    // We intentionally skip engine.reset() / ir.reset() here — prepare() is
+    // idempotent for both.
 }
 
 void ZoneBlender::getZoneBlend(float dialValue, int& zoneA, int& zoneB, float& blendFactor)
 {
-    // Clamp dial to 0-10
     dialValue = juce::jlimit(0.0f, 10.0f, dialValue);
 
-    // Each zone spans 2 units: 0-2, 2-4, 4-6, 6-8, 8-10
-    // Zone index = floor(dialValue / 2), clamped to 0-4
     zoneA = juce::jlimit(0, 4, static_cast<int>(dialValue / 2.0f));
 
-    // Handle edge case at exactly 10.0
     if (zoneA >= 4)
     {
         zoneA = 4;
@@ -45,12 +44,8 @@ void ZoneBlender::getZoneBlend(float dialValue, int& zoneA, int& zoneB, float& b
         return;
     }
 
-    // Position within the current zone (0.0 to 1.0)
     float posInZone = (dialValue - static_cast<float>(zoneA) * 2.0f) / 2.0f;
 
-    // Blend starts in the second half of the zone
-    // First half (0.0-0.5): pure zone A
-    // Second half (0.5-1.0): blend from zone A to zone B
     if (posInZone <= 0.5f)
     {
         zoneB = zoneA;
@@ -59,7 +54,6 @@ void ZoneBlender::getZoneBlend(float dialValue, int& zoneA, int& zoneB, float& b
     else
     {
         zoneB = juce::jlimit(0, 4, zoneA + 1);
-        // Map 0.5-1.0 to 0.0-1.0
         blendFactor = (posInZone - 0.5f) * 2.0f;
     }
 }
@@ -84,71 +78,90 @@ void ZoneBlender::process(juce::AudioBuffer<float>& buffer, float dialValue)
     float blendFactor;
     getZoneBlend(dialValue, zoneA, zoneB, blendFactor);
 
-    // If no models loaded, pass through
-    if (!namEngines[static_cast<size_t>(zoneA)].isLoaded())
-        return;
+    const auto idxA = static_cast<size_t>(zoneA);
+    const auto idxB = static_cast<size_t>(zoneB);
 
-    // Process mono (channel 0) through NAM, then copy to other channels
-    // NAM models are mono
+    // Log the first time zoneA is not loaded. This makes silent load failures
+    // visible without flooding Console every block.
+    if (!namEngines[idxA].isLoaded() && !loggedMissingZone[idxA])
+    {
+        juce::Logger::writeToLog("ZoneBlender: zone " + juce::String(zoneA) + " NAM not loaded — passthrough");
+        loggedMissingZone[idxA] = true;
+    }
+
+    // NAM is mono: process channel 0 only, then replicate to other channels.
+    float* ch0 = buffer.getWritePointer(0);
 
     if (blendFactor < 0.001f)
     {
-        // Pure zone A - single NAM + IR
-        namEngines[static_cast<size_t>(zoneA)].process(buffer.getWritePointer(0), numSamples);
-        irLoaders[static_cast<size_t>(zoneA)].process(buffer.getWritePointer(0), numSamples);
+        // Pure zone A: NAM then IR, each gracefully skipped if not ready.
+        if (namEngines[idxA].isLoaded())
+            namEngines[idxA].process(ch0, numSamples);
+        if (irLoaders[idxA].isLoaded())
+            irLoaders[idxA].process(ch0, numSamples);
     }
     else
     {
-        // Blend between zone A and zone B
-        // Copy input to temp buffers
+        // Blend between zone A and zone B.
         tempBufferA.copyFrom(0, 0, buffer, 0, 0, numSamples);
         tempBufferB.copyFrom(0, 0, buffer, 0, 0, numSamples);
 
-        // Process each zone
-        namEngines[static_cast<size_t>(zoneA)].process(tempBufferA.getWritePointer(0), numSamples);
-        irLoaders[static_cast<size_t>(zoneA)].process(tempBufferA.getWritePointer(0), numSamples);
+        if (namEngines[idxA].isLoaded())
+            namEngines[idxA].process(tempBufferA.getWritePointer(0), numSamples);
+        if (irLoaders[idxA].isLoaded())
+            irLoaders[idxA].process(tempBufferA.getWritePointer(0), numSamples);
 
-        if (namEngines[static_cast<size_t>(zoneB)].isLoaded())
-        {
-            namEngines[static_cast<size_t>(zoneB)].process(tempBufferB.getWritePointer(0), numSamples);
-            irLoaders[static_cast<size_t>(zoneB)].process(tempBufferB.getWritePointer(0), numSamples);
-        }
+        if (namEngines[idxB].isLoaded())
+            namEngines[idxB].process(tempBufferB.getWritePointer(0), numSamples);
+        if (irLoaders[idxB].isLoaded())
+            irLoaders[idxB].process(tempBufferB.getWritePointer(0), numSamples);
 
-        // Mix: output = A * (1 - blend) + B * blend
-        float* output = buffer.getWritePointer(0);
         const float* aData = tempBufferA.getReadPointer(0);
         const float* bData = tempBufferB.getReadPointer(0);
         const float invBlend = 1.0f - blendFactor;
 
         for (int i = 0; i < numSamples; ++i)
-            output[i] = aData[i] * invBlend + bData[i] * blendFactor;
+            ch0[i] = aData[i] * invBlend + bData[i] * blendFactor;
     }
 
-    // Copy mono result to all channels
+    // Copy mono result to all other channels.
     for (int ch = 1; ch < numChannels; ++ch)
         buffer.copyFrom(ch, 0, buffer, 0, 0, numSamples);
 }
 
-void ZoneBlender::loadZoneProfile(int zoneIndex, const void* data, size_t dataSize)
+bool ZoneBlender::loadZoneProfile(int zoneIndex, const void* data, size_t dataSize)
 {
-    if (zoneIndex >= 0 && zoneIndex < kNumZones)
-        namEngines[static_cast<size_t>(zoneIndex)].loadModel(data, dataSize);
+    if (zoneIndex < 0 || zoneIndex >= kNumZones)
+        return false;
+    bool ok = namEngines[static_cast<size_t>(zoneIndex)].loadModel(data, dataSize);
+    if (!ok)
+        juce::Logger::writeToLog("ZoneBlender: failed to load NAM for zone " + juce::String(zoneIndex));
+    return ok;
 }
 
-void ZoneBlender::loadZoneProfileFromFile(int zoneIndex, const juce::String& filePath)
+bool ZoneBlender::loadZoneProfileFromFile(int zoneIndex, const juce::String& filePath)
 {
-    if (zoneIndex >= 0 && zoneIndex < kNumZones)
-        namEngines[static_cast<size_t>(zoneIndex)].loadModelFromFile(filePath);
+    if (zoneIndex < 0 || zoneIndex >= kNumZones)
+        return false;
+    return namEngines[static_cast<size_t>(zoneIndex)].loadModelFromFile(filePath);
 }
 
-void ZoneBlender::loadZoneIR(int zoneIndex, const void* data, size_t dataSize, double sampleRate)
+void ZoneBlender::loadZoneIR(int zoneIndex, const void* data, size_t dataSize)
 {
     if (zoneIndex >= 0 && zoneIndex < kNumZones)
-        irLoaders[static_cast<size_t>(zoneIndex)].loadFromMemory(data, dataSize, sampleRate);
+        irLoaders[static_cast<size_t>(zoneIndex)].loadFromMemory(data, dataSize);
 }
 
-void ZoneBlender::loadZoneIRFromFile(int zoneIndex, const juce::String& filePath, double sampleRate)
+void ZoneBlender::loadZoneIRFromFile(int zoneIndex, const juce::String& filePath)
 {
     if (zoneIndex >= 0 && zoneIndex < kNumZones)
-        irLoaders[static_cast<size_t>(zoneIndex)].loadFromFile(filePath, sampleRate);
+        irLoaders[static_cast<size_t>(zoneIndex)].loadFromFile(filePath);
+}
+
+int ZoneBlender::getLoadedZoneCount() const
+{
+    int n = 0;
+    for (const auto& e : namEngines)
+        if (e.isLoaded()) ++n;
+    return n;
 }

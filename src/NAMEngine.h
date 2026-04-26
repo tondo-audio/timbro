@@ -33,6 +33,9 @@ public:
     // Check if a model is loaded
     bool isLoaded() const;
 
+    // Sample rate the model was trained at (-1 if unknown)
+    double getModelSampleRate() const;
+
     // Release resources
     void reset();
 
@@ -40,6 +43,7 @@ private:
     std::unique_ptr<nam::DSP> model;
     double currentSampleRate = 44100.0;
     int currentBlockSize = 512;
+    double modelSampleRate = -1.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NAMEngine)
 };

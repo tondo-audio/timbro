@@ -13,20 +13,24 @@ OneDial::OneDial()
     outputGainParam = apvts.getRawParameterValue("outputGain");
     bypassParam = apvts.getRawParameterValue("bypass");
 
-    // Load NAM profiles from binary resources
+    // Load NAM profiles from binary resources. NAMEngine::loadModel now
+    // deserializes JSON directly from memory — safe inside the AU sandbox.
     zoneBlender.loadZoneProfile(0, BinaryData::clean_nam,  BinaryData::clean_namSize);
     zoneBlender.loadZoneProfile(1, BinaryData::warm_nam,   BinaryData::warm_namSize);
     zoneBlender.loadZoneProfile(2, BinaryData::crunch_nam, BinaryData::crunch_namSize);
     zoneBlender.loadZoneProfile(3, BinaryData::drive_nam,  BinaryData::drive_namSize);
     zoneBlender.loadZoneProfile(4, BinaryData::lead_nam,   BinaryData::lead_namSize);
 
-    // Load cabinet IR (same Mesa OS 4x12 for all zones)
-    const double defaultSampleRate = 44100.0;
-    zoneBlender.loadZoneIR(0, BinaryData::clean_wav,  BinaryData::clean_wavSize,  defaultSampleRate);
-    zoneBlender.loadZoneIR(1, BinaryData::warm_wav,   BinaryData::warm_wavSize,   defaultSampleRate);
-    zoneBlender.loadZoneIR(2, BinaryData::crunch_wav, BinaryData::crunch_wavSize, defaultSampleRate);
-    zoneBlender.loadZoneIR(3, BinaryData::drive_wav,  BinaryData::drive_wavSize,  defaultSampleRate);
-    zoneBlender.loadZoneIR(4, BinaryData::lead_wav,   BinaryData::lead_wavSize,   defaultSampleRate);
+    // Queue cabinet IRs. Data is held inside IRLoader and committed to the
+    // juce::dsp::Convolution in IRLoader::prepare(), which the host triggers
+    // via prepareToPlay → ZoneBlender::prepare.
+    zoneBlender.loadZoneIR(0, BinaryData::clean_wav,  BinaryData::clean_wavSize);
+    zoneBlender.loadZoneIR(1, BinaryData::warm_wav,   BinaryData::warm_wavSize);
+    zoneBlender.loadZoneIR(2, BinaryData::crunch_wav, BinaryData::crunch_wavSize);
+    zoneBlender.loadZoneIR(3, BinaryData::drive_wav,  BinaryData::drive_wavSize);
+    zoneBlender.loadZoneIR(4, BinaryData::lead_wav,   BinaryData::lead_wavSize);
+
+    juce::Logger::writeToLog("OneDial: ctor loaded " + juce::String(zoneBlender.getLoadedZoneCount()) + "/5 zones");
 }
 
 OneDial::~OneDial() = default;
@@ -55,6 +59,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout OneDial::createParameterLayo
 
 void OneDial::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    juce::Logger::writeToLog("OneDial::prepareToPlay sr=" + juce::String(sampleRate)
+                             + " block=" + juce::String(samplesPerBlock));
     zoneBlender.prepare(sampleRate, samplesPerBlock);
 
     // Noise gate - fixed internal settings

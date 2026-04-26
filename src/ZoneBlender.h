@@ -51,10 +51,13 @@ public:
     static void getZoneBlend(float dialValue, int& zoneA, int& zoneB, float& blendFactor);
 
     // Load NAM profiles and IR cabinets
-    void loadZoneProfile(int zoneIndex, const void* data, size_t dataSize);
-    void loadZoneProfileFromFile(int zoneIndex, const juce::String& filePath);
-    void loadZoneIR(int zoneIndex, const void* data, size_t dataSize, double sampleRate);
-    void loadZoneIRFromFile(int zoneIndex, const juce::String& filePath, double sampleRate);
+    bool loadZoneProfile(int zoneIndex, const void* data, size_t dataSize);
+    bool loadZoneProfileFromFile(int zoneIndex, const juce::String& filePath);
+    void loadZoneIR(int zoneIndex, const void* data, size_t dataSize);
+    void loadZoneIRFromFile(int zoneIndex, const juce::String& filePath);
+
+    // Number of zones whose NAM profile successfully loaded
+    int getLoadedZoneCount() const;
 
 private:
     static constexpr int kNumZones = 5;
@@ -65,6 +68,9 @@ private:
     // Temp buffers for parallel processing
     juce::AudioBuffer<float> tempBufferA;
     juce::AudioBuffer<float> tempBufferB;
+
+    // Per-zone first-time "not loaded" log latch
+    std::array<bool, kNumZones> loggedMissingZone{};
 
     double currentSampleRate = 44100.0;
     int currentBlockSize = 512;

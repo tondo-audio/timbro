@@ -7,26 +7,43 @@ IRLoader::IRLoader()
 
 IRLoader::~IRLoader() = default;
 
-void IRLoader::loadFromMemory(const void* data, size_t dataSize, double sampleRate)
+void IRLoader::loadFromMemory(const void* data, size_t dataSize)
 {
-    convolution.loadImpulseResponse(data, dataSize,
-                                     juce::dsp::Convolution::Stereo::no,
-                                     juce::dsp::Convolution::Trim::yes,
-                                     0); // 0 = use full IR
-    loaded = true;
+    if (data == nullptr || dataSize == 0)
+    {
+        juce::Logger::writeToLog("IRLoader::loadFromMemory: empty data");
+        return;
+    }
+
+    pendingData = data;
+    pendingSize = dataSize;
+
+    if (prepared)
+        commitPendingIR();
 }
 
-void IRLoader::loadFromFile(const juce::String& filePath, double sampleRate)
+void IRLoader::loadFromFile(const juce::String& filePath)
 {
     juce::File irFile(filePath);
     if (!irFile.existsAsFile())
+    {
+        juce::Logger::writeToLog("IRLoader::loadFromFile: file not found: " + filePath);
         return;
+    }
+
+    if (!prepared)
+    {
+        juce::Logger::writeToLog("IRLoader::loadFromFile: not prepared yet — file path cannot be deferred");
+        return;
+    }
 
     convolution.loadImpulseResponse(irFile,
-                                     juce::dsp::Convolution::Stereo::no,
-                                     juce::dsp::Convolution::Trim::yes,
-                                     0);
+                                    juce::dsp::Convolution::Stereo::no,
+                                    juce::dsp::Convolution::Trim::yes,
+                                    0);
     loaded = true;
+    pendingData = nullptr;
+    pendingSize = 0;
 }
 
 void IRLoader::prepare(double sampleRate, int samplesPerBlock)
@@ -39,11 +56,24 @@ void IRLoader::prepare(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
     spec.numChannels = 1;
     convolution.prepare(spec);
+    prepared = true;
+
+    if (pendingData != nullptr)
+        commitPendingIR();
+}
+
+void IRLoader::commitPendingIR()
+{
+    convolution.loadImpulseResponse(pendingData, pendingSize,
+                                    juce::dsp::Convolution::Stereo::no,
+                                    juce::dsp::Convolution::Trim::yes,
+                                    0); // 0 = use full IR length
+    loaded = true;
 }
 
 void IRLoader::process(float* buffer, int numSamples)
 {
-    if (!loaded)
+    if (!loaded || !prepared)
         return;
 
     juce::dsp::AudioBlock<float> block(&buffer, 1, static_cast<size_t>(numSamples));
@@ -55,4 +85,7 @@ void IRLoader::reset()
 {
     convolution.reset();
     loaded = false;
+    prepared = false;
+    pendingData = nullptr;
+    pendingSize = 0;
 }
