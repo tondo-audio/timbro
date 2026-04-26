@@ -36,14 +36,34 @@ public:
     // Sample rate the model was trained at (-1 if unknown)
     double getModelSampleRate() const;
 
+    // Loudness compensation gain (linear) applied after model->process to
+    // normalize all profiles to a common target loudness. 1.0 if the model
+    // has no loudness metadata (legacy .nam files).
+    float getLoudnessGain() const { return loudnessGain; }
+
     // Release resources
     void reset();
 
+    // Target loudness in dB used for compensation. -18 dB matches the
+    // convention used by Sdatkinson's NeuralAmpModelerPlugin and the NAM
+    // training pipeline (a sine reference at -18 dBFS RMS yields a model
+    // whose GetLoudness() ≈ -18 dB at unity).
+    static constexpr double kTargetLoudnessDb = -18.0;
+
 private:
+    void recomputeLoudnessGain();
+
+    // Measures the model's loudness empirically by processing a sine at
+    // -18 dBFS RMS and reading back the output RMS. Used as a fallback for
+    // legacy .nam files that don't carry loudness metadata, so any third-
+    // party profile a user drops in normalizes to the same target.
+    double measureLoudnessDb();
+
     std::unique_ptr<nam::DSP> model;
     double currentSampleRate = 44100.0;
     int currentBlockSize = 512;
     double modelSampleRate = -1.0;
+    float loudnessGain = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NAMEngine)
 };
