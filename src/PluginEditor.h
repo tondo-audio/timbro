@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-class OneDial;
+class Timbro;
 
 // Vintage analog look and feel inspired by classic 60s/70s studio gear
 class VintageLookAndFeel : public juce::LookAndFeel_V4
@@ -30,17 +30,17 @@ private:
     float dialValue = 5.0f;
 };
 
-class OneDialEditor : public juce::AudioProcessorEditor
+class TimbroEditor : public juce::AudioProcessorEditor
 {
 public:
-    explicit OneDialEditor(OneDial&);
-    ~OneDialEditor() override;
+    explicit TimbroEditor(Timbro&);
+    ~TimbroEditor() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
 
 private:
-    OneDial& processor;
+    Timbro& processor;
     VintageLookAndFeel vintageLnf;
 
     // Main dial
@@ -67,5 +67,5 @@ private:
 
     void updateZoneLabel();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OneDialEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimbroEditor)
 };

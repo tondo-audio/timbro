@@ -349,7 +349,7 @@ void ZoneStrip::paint(juce::Graphics& g)
 // Editor
 // ============================================================
 
-OneDialEditor::OneDialEditor(OneDial& p)
+TimbroEditor::TimbroEditor(Timbro& p)
     : AudioProcessorEditor(&p), processor(p)
 {
     setSize(static_cast<int>(kWindowW), static_cast<int>(kWindowH));
@@ -409,12 +409,12 @@ OneDialEditor::OneDialEditor(OneDial& p)
     updateZoneLabel();
 }
 
-OneDialEditor::~OneDialEditor()
+TimbroEditor::~TimbroEditor()
 {
     setLookAndFeel(nullptr);
 }
 
-void OneDialEditor::paint(juce::Graphics& g)
+void TimbroEditor::paint(juce::Graphics& g)
 {
     auto w = static_cast<float>(getWidth());
     auto h = static_cast<float>(getHeight());
@@ -469,9 +469,9 @@ void OneDialEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.setFont(juce::FontOptions(24.0f, juce::Font::bold));
-    g.drawText("ONEDIAL", nameplateArea.translated(0.8f, 0.8f), juce::Justification::centred);
+    g.drawText("TIMBRO", nameplateArea.translated(0.8f, 0.8f), juce::Justification::centred);
     g.setColour(kIvory.withAlpha(0.9f));
-    g.drawText("ONEDIAL", nameplateArea, juce::Justification::centred);
+    g.drawText("TIMBRO", nameplateArea, juce::Justification::centred);
 
     g.setColour(kIvoryDim.withAlpha(0.3f));
     g.setFont(juce::FontOptions(8.0f));
@@ -530,7 +530,7 @@ void OneDialEditor::paint(juce::Graphics& g)
     g.drawLine(30.0f, h - 20.0f, w - 30.0f, h - 20.0f, 0.5f);
 }
 
-void OneDialEditor::resized()
+void TimbroEditor::resized()
 {
     auto bounds = getLocalBounds();
 
@@ -573,7 +573,7 @@ void OneDialEditor::resized()
     bypassButton.setBounds(centerCol.reduced(20, 8));
 }
 
-void OneDialEditor::updateZoneLabel()
+void TimbroEditor::updateZoneLabel()
 {
     float dialValue = static_cast<float>(dialKnob.getValue());
     zoneLabel.setText(ZoneBlender::getZoneName(dialValue), juce::dontSendNotification);

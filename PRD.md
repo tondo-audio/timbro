@@ -1,4 +1,4 @@
-# ONEDIAL
+# TIMBRO
 ### Neural Amp Modeler Plugin for Logic Pro
 **Product Requirements Document · v1.0 · Marzo 2026**
 
@@ -6,7 +6,7 @@
 
 | Campo | Dettaglio |
 |---|---|
-| Nome prodotto | OneDial |
+| Nome prodotto | Timbro |
 | Tipologia | Audio Unit (AU) Plugin per macOS |
 | Target DAW | Logic Pro (uso personale) |
 | Distribuzione | Open source · GitHub |
@@ -17,7 +17,7 @@
 
 ## 1. Vision e Obiettivo
 
-OneDial è un plugin AU open source per Logic Pro che porta il suono di amplificatori reali catturati con tecnologia Neural Amp Modeler (NAM) direttamente nella DAW, attraverso un'interfaccia radicalmente semplice: una sola manopola.
+Timbro è un plugin AU open source per Logic Pro che porta il suono di amplificatori reali catturati con tecnologia Neural Amp Modeler (NAM) direttamente nella DAW, attraverso un'interfaccia radicalmente semplice: una sola manopola.
 
 L'utente non deve scegliere profili, gestire file, configurare catene di segnale o conoscere la tecnologia NAM. Gira la manopola verso sinistra per suoni puliti, verso destra per suoni distorti. Il plugin fa tutto il resto.
 

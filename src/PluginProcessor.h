@@ -4,11 +4,11 @@
 #include <juce_dsp/juce_dsp.h>
 #include "ZoneBlender.h"
 
-class OneDial : public juce::AudioProcessor
+class Timbro : public juce::AudioProcessor
 {
 public:
-    OneDial();
-    ~OneDial() override;
+    Timbro();
+    ~Timbro() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -58,5 +58,5 @@ private:
     std::atomic<float> outputLevelLeft{0.0f};
     std::atomic<float> outputLevelRight{0.0f};
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OneDial)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Timbro)
 };

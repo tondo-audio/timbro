@@ -2,7 +2,7 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
-OneDial::OneDial()
+Timbro::Timbro()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -30,12 +30,12 @@ OneDial::OneDial()
     zoneBlender.loadZoneIR(3, BinaryData::drive_wav,  BinaryData::drive_wavSize);
     zoneBlender.loadZoneIR(4, BinaryData::lead_wav,   BinaryData::lead_wavSize);
 
-    juce::Logger::writeToLog("OneDial: ctor loaded " + juce::String(zoneBlender.getLoadedZoneCount()) + "/5 zones");
+    juce::Logger::writeToLog("Timbro: ctor loaded " + juce::String(zoneBlender.getLoadedZoneCount()) + "/5 zones");
 }
 
-OneDial::~OneDial() = default;
+Timbro::~Timbro() = default;
 
-juce::AudioProcessorValueTreeState::ParameterLayout OneDial::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout Timbro::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
@@ -57,7 +57,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout OneDial::createParameterLayo
     return {params.begin(), params.end()};
 }
 
-void OneDial::prepareToPlay(double sampleRate, int samplesPerBlock)
+void Timbro::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     zoneBlender.prepare(sampleRate, samplesPerBlock);
 
@@ -73,13 +73,13 @@ void OneDial::prepareToPlay(double sampleRate, int samplesPerBlock)
     noiseGate.setRelease(50.0f);
 }
 
-void OneDial::releaseResources()
+void Timbro::releaseResources()
 {
     zoneBlender.releaseResources();
     noiseGate.reset();
 }
 
-bool OneDial::isBusesLayoutSupported(const BusesLayout& layouts) const
+bool Timbro::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
     const auto& mainInput = layouts.getMainInputChannelSet();
     const auto& mainOutput = layouts.getMainOutputChannelSet();
@@ -94,7 +94,7 @@ bool OneDial::isBusesLayoutSupported(const BusesLayout& layouts) const
     return true;
 }
 
-void OneDial::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void Timbro::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
 
@@ -138,19 +138,19 @@ void OneDial::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
         outputLevelRight.store(outputLevelLeft.load());
 }
 
-juce::AudioProcessorEditor* OneDial::createEditor()
+juce::AudioProcessorEditor* Timbro::createEditor()
 {
-    return new OneDialEditor(*this);
+    return new TimbroEditor(*this);
 }
 
-void OneDial::getStateInformation(juce::MemoryBlock& destData)
+void Timbro::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
 
-void OneDial::setStateInformation(const void* data, int sizeInBytes)
+void Timbro::setStateInformation(const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
     if (xml != nullptr && xml->hasTagName(apvts.state.getType()))
@@ -159,5 +159,5 @@ void OneDial::setStateInformation(const void* data, int sizeInBytes)
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new OneDial();
+    return new Timbro();
 }

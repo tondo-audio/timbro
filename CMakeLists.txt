@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(OneDial VERSION 1.0.0 LANGUAGES C CXX)
+project(Timbro VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,13 +40,13 @@ CPMAddPackage(
 )
 
 # --- Plugin Target ---
-juce_add_plugin(OneDial
-    COMPANY_NAME "OneDial"
-    PLUGIN_MANUFACTURER_CODE ODia
-    PLUGIN_CODE ODi1
+juce_add_plugin(Timbro
+    COMPANY_NAME "Tondo Audio"
+    PLUGIN_MANUFACTURER_CODE TmbR
+    PLUGIN_CODE Tmb1
     FORMATS AU Standalone
-    PRODUCT_NAME "OneDial"
-    BUNDLE_ID "com.onedial.plugin"
+    PRODUCT_NAME "Timbro"
+    BUNDLE_ID "audio.tondo.timbro"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -55,12 +55,12 @@ juce_add_plugin(OneDial
     COPY_PLUGIN_AFTER_BUILD TRUE
     AU_MAIN_TYPE "kAudioUnitType_Effect"
     DESCRIPTION "Neural Amp Modeler with One Dial"
-    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/onedial_icon.png"
-    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/onedial_icon.png"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/timbro_icon.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/timbro_icon.png"
 )
 
 # --- Source Files ---
-target_sources(OneDial PRIVATE
+target_sources(Timbro PRIVATE
     src/PluginProcessor.cpp
     src/PluginEditor.cpp
     src/NAMEngine.cpp
@@ -69,19 +69,19 @@ target_sources(OneDial PRIVATE
 )
 
 # --- Include Directories ---
-target_include_directories(OneDial PRIVATE
+target_include_directories(Timbro PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # NeuralAmpModelerCore include paths
-target_include_directories(OneDial PRIVATE
+target_include_directories(Timbro PRIVATE
     ${NeuralAmpModelerCore_SOURCE_DIR}
     ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies/nlohmann
     ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies
 )
 
 # Eigen include path
-target_include_directories(OneDial PRIVATE
+target_include_directories(Timbro PRIVATE
     ${Eigen_SOURCE_DIR}
 )
 
@@ -90,12 +90,12 @@ file(GLOB NAM_PROFILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/profiles/*.nam")
 file(GLOB IR_CABINETS "${CMAKE_CURRENT_SOURCE_DIR}/resources/cabinets/*.wav")
 
 if(NAM_PROFILES OR IR_CABINETS)
-    juce_add_binary_data(OneDial_Resources SOURCES ${NAM_PROFILES} ${IR_CABINETS})
-    target_link_libraries(OneDial PRIVATE OneDial_Resources)
+    juce_add_binary_data(Timbro_Resources SOURCES ${NAM_PROFILES} ${IR_CABINETS})
+    target_link_libraries(Timbro PRIVATE Timbro_Resources)
 endif()
 
 # --- JUCE Compile Definitions ---
-target_compile_definitions(OneDial PUBLIC
+target_compile_definitions(Timbro PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
@@ -109,7 +109,7 @@ target_compile_definitions(OneDial PUBLIC
 # below, but LTO would still aggressively prune the same anonymous-namespace
 # ConfigParserHelper objects in wavenet/model.cpp, lstm.cpp etc. Skipping
 # the LTO recommendation removes that risk entirely.
-target_link_libraries(OneDial
+target_link_libraries(Timbro
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
@@ -130,40 +130,40 @@ target_link_libraries(OneDial
 # WaveNet". Using a static archive + -force_load tells the linker to
 # include every member of the archive, preserving the initializers.
 if(TARGET nam)
-    target_link_libraries(OneDial PRIVATE nam)
+    target_link_libraries(Timbro PRIVATE nam)
 elseif(TARGET NeuralAmpModelerCore)
-    target_link_libraries(OneDial PRIVATE NeuralAmpModelerCore)
+    target_link_libraries(Timbro PRIVATE NeuralAmpModelerCore)
 else()
     file(GLOB_RECURSE NAM_SOURCES "${NeuralAmpModelerCore_SOURCE_DIR}/NAM/*.cpp")
-    add_library(onedial_nam_core STATIC ${NAM_SOURCES})
-    target_include_directories(onedial_nam_core PUBLIC
+    add_library(timbro_nam_core STATIC ${NAM_SOURCES})
+    target_include_directories(timbro_nam_core PUBLIC
         ${NeuralAmpModelerCore_SOURCE_DIR}
         ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies/nlohmann
         ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies
         ${Eigen_SOURCE_DIR}
     )
-    target_compile_features(onedial_nam_core PUBLIC cxx_std_17)
-    target_compile_definitions(onedial_nam_core PUBLIC NAM_SAMPLE_FLOAT=1)
-    set_target_properties(onedial_nam_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_features(timbro_nam_core PUBLIC cxx_std_17)
+    target_compile_definitions(timbro_nam_core PUBLIC NAM_SAMPLE_FLOAT=1)
+    set_target_properties(timbro_nam_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
     # INTERFACE so the option propagates to the final plugin bundle
-    # (OneDial_AU, OneDial_Standalone) where ld actually runs. JUCE's
-    # "OneDial" is a static aggregator; per-format targets are what link.
+    # (Timbro_AU, Timbro_Standalone) where ld actually runs. JUCE's
+    # "Timbro" is a static aggregator; per-format targets are what link.
     # macOS uses Apple ld's -force_load. GNU ld uses --whole-archive.
     if(APPLE)
-        target_link_options(onedial_nam_core INTERFACE
-            "LINKER:-force_load,$<TARGET_FILE:onedial_nam_core>")
+        target_link_options(timbro_nam_core INTERFACE
+            "LINKER:-force_load,$<TARGET_FILE:timbro_nam_core>")
     elseif(UNIX)
-        target_link_options(onedial_nam_core INTERFACE
-            "LINKER:--whole-archive,$<TARGET_FILE:onedial_nam_core>,--no-whole-archive")
+        target_link_options(timbro_nam_core INTERFACE
+            "LINKER:--whole-archive,$<TARGET_FILE:timbro_nam_core>,--no-whole-archive")
     else()
-        message(FATAL_ERROR "OneDial is currently macOS-only; force-loading "
+        message(FATAL_ERROR "Timbro is currently macOS-only; force-loading "
                 "the NAM static archive on this platform is not configured.")
     endif()
-    target_link_libraries(OneDial PRIVATE onedial_nam_core)
+    target_link_libraries(Timbro PRIVATE timbro_nam_core)
 endif()
 
-target_link_libraries(OneDial PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(Timbro PRIVATE nlohmann_json::nlohmann_json)
 
 # --- Test executable: drives ZoneBlender directly to verify the dial
 #     produces distinct tonal responses across the 5 zones. Uses the same
@@ -178,6 +178,6 @@ target_link_libraries(test_dial PRIVATE
     juce::juce_dsp
     juce::juce_core
     nlohmann_json::nlohmann_json
-    onedial_nam_core
-    OneDial_Resources
+    timbro_nam_core
+    Timbro_Resources
 )

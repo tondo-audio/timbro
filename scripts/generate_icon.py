@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate OneDial app icon - a minimal dial/knob design."""
+"""Generate Timbro app icon - a minimal dial/knob design."""
 
 from PIL import Image, ImageDraw, ImageFont
 import math
@@ -173,9 +173,9 @@ if __name__ == "__main__":
     os.makedirs(ICON_DIR, exist_ok=True)
 
     icon = draw_icon()
-    png_path = os.path.join(ICON_DIR, "onedial_icon.png")
+    png_path = os.path.join(ICON_DIR, "timbro_icon.png")
     icon.save(png_path)
     print(f"Saved PNG: {png_path}")
 
-    icns_path = os.path.join(ICON_DIR, "OneDial.icns")
+    icns_path = os.path.join(ICON_DIR, "Timbro.icns")
     create_icns(png_path, icns_path)
