@@ -88,9 +88,11 @@ target_include_directories(Timbro PRIVATE
 # --- Bundle Resources ---
 file(GLOB NAM_PROFILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/profiles/*.nam")
 file(GLOB IR_CABINETS "${CMAKE_CURRENT_SOURCE_DIR}/resources/cabinets/*.wav")
+file(GLOB UI_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/resources/ui/*.png")
 
-if(NAM_PROFILES OR IR_CABINETS)
-    juce_add_binary_data(Timbro_Resources SOURCES ${NAM_PROFILES} ${IR_CABINETS})
+if(NAM_PROFILES OR IR_CABINETS OR UI_ASSETS)
+    juce_add_binary_data(Timbro_Resources SOURCES
+        ${NAM_PROFILES} ${IR_CABINETS} ${UI_ASSETS})
     target_link_libraries(Timbro PRIVATE Timbro_Resources)
 endif()
 

@@ -5,30 +5,49 @@
 
 class Timbro;
 
-// Vintage analog look and feel inspired by classic 60s/70s studio gear
-class VintageLookAndFeel : public juce::LookAndFeel_V4
+// =============================================================================
+// Asset-based LookAndFeel — every visible control is rendered by blitting a
+// frame of a pre-rendered Blender filmstrip on top of the panel image.
+// =============================================================================
+class TimbroLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    VintageLookAndFeel();
+    TimbroLookAndFeel();
+
     void drawRotarySlider(juce::Graphics&, int x, int y, int width, int height,
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider&) override;
+
     void drawToggleButton(juce::Graphics&, juce::ToggleButton&,
                           bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown) override;
-};
-
-// Zone indicator strip showing active tonal zone
-class ZoneStrip : public juce::Component
-{
-public:
-    ZoneStrip();
-    void paint(juce::Graphics&) override;
-    void setDialValue(float value);
 
 private:
-    float dialValue = 5.0f;
+    juce::Image knobStrip;     // 128 vertical frames, square
+    juce::Image switchStrip;   // 2 vertical frames (UP/ON, DOWN/OFF)
 };
+
+
+// Strip of 5 vintage amber lamps above the VOICE knob. Each lamp's brightness
+// reflects how much of the corresponding zone is currently mixed in — at the
+// midpoint of a transition both adjacent lamps glow at half intensity.
+class ZoneIndicator : public juce::Component, private juce::Timer
+{
+public:
+    explicit ZoneIndicator(juce::AudioProcessorValueTreeState& apvts);
+    ~ZoneIndicator() override;
+
+    void paint(juce::Graphics&) override;
+
+private:
+    void timerCallback() override;
+
+    juce::AudioProcessorValueTreeState& apvts;
+    float lastDialValue = -1.0f;
+
+    JUCE_DECLARE_NON_COPYABLE(ZoneIndicator)
+};
+
 
 class TimbroEditor : public juce::AudioProcessorEditor
 {
@@ -41,31 +60,22 @@ public:
 
 private:
     Timbro& processor;
-    VintageLookAndFeel vintageLnf;
+    TimbroLookAndFeel lnf;
 
-    // Main dial
-    juce::Slider dialKnob;
+    juce::Image panelImage;
 
-    // Zone display
-    ZoneStrip zoneStrip;
-    juce::Label zoneLabel;
-
-    // Secondary controls
+    // Four controls in a row: BYPASS toggle, INPUT knob, OUTPUT knob, VOICE knob
+    juce::ToggleButton bypassButton{"BYPASS"};
     juce::Slider inputKnob;
     juce::Slider outputKnob;
-    juce::Label inputLabel;
-    juce::Label outputLabel;
+    juce::Slider voiceKnob;
 
-    // Bypass
-    juce::ToggleButton bypassButton{"BYPASS"};
+    ZoneIndicator zoneIndicator;
 
-    // APVTS attachments
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> dialAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
-
-    void updateZoneLabel();
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>  inputAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>  outputAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>  voiceAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimbroEditor)
 };
