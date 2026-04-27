@@ -44,11 +44,13 @@ public:
     // Release resources
     void reset();
 
-    // Target loudness in dB used for compensation. -18 dB matches the
-    // convention used by Sdatkinson's NeuralAmpModelerPlugin and the NAM
-    // training pipeline (a sine reference at -18 dBFS RMS yields a model
-    // whose GetLoudness() ≈ -18 dB at unity).
-    static constexpr double kTargetLoudnessDb = -18.0;
+    // Target loudness in dB used for compensation. -12 dB sits 6 dB above
+    // the NAM training pipeline's reamping reference (-18 dBFS) so the
+    // plugin lands near commercial mix levels without needing a heavy
+    // makeup pass on the output. With the ±15 dB clamp in
+    // recomputeLoudnessGain this is still a safe operating point for any
+    // reasonably trained model.
+    static constexpr double kTargetLoudnessDb = -12.0;
 
 private:
     void recomputeLoudnessGain();
