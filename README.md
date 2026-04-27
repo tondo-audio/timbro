@@ -28,13 +28,13 @@ Under the hood, five [Neural Amp Modeler](https://github.com/sdatkinson/NeuralAm
 
 | Dial | Zone | Character |
 |:---:|:---:|:---|
-| `0 – 2` | **CLEAN** | Fender Deluxe Reverb — glassy, bell-like cleans |
-| `2 – 4` | **WARM** | Vox AC30 Top Boost — chimey breakup |
-| `4 – 6` | **CRUNCH** | Marshall 1959SLP Plexi — classic British grind |
-| `6 – 8` | **DRIVE** | Marshall JCM800 — tight, aggressive midrange |
-| `8 – 10` | **LEAD** | Mesa Boogie Rectifier — thick, saturated sustain |
+| `0 – 2` | **CLEAN** | Fender Deluxe Reverb '65 — glassy, bell-like cleans |
+| `2 – 4` | **WARM** | Two-Rock Studio Signature — singing mid-gain à la John Mayer |
+| `4 – 6` | **CRUNCH** | Marshall JTM45 — articulate British crunch |
+| `6 – 8` | **DRIVE** | Marshall JCM800 2203 — tight, aggressive midrange |
+| `8 – 10` | **LEAD** | Mesa Boogie Mark IV — thick, saturated lead sustain |
 
-Every position between zones blends the two nearest amp models in real time, using an **equal-power crossfade** so there is no level dip in the middle of a transition. Position 3.7? That's the upper half of WARM smoothly handing over to CRUNCH, mixed in quadrature so the perceived loudness stays flat.
+Every position between zones blends the two nearest amp models in real time. The crossfade combines a `cos`/`sin` equal-power curve with a `sin(t·π)` perceptual make-up that peaks at +1.5 dB in the middle of the blend, so the perceived loudness stays flat while the timbre morphs smoothly. Position 3.7? That's the upper half of WARM handing over to CRUNCH, with full level all the way through.
 
 ## Signal chain
 
@@ -47,8 +47,8 @@ Guitar In → Noise Gate → [NAM Zone A ⟷ NAM Zone B] → IR Cabinet → Outp
 
 - **Single-knob workflow** — dial in a tone in seconds.
 - **Neural amp modeling** powered by NeuralAmpModelerCore (WaveNet, LSTM, ConvNet, Linear architectures all supported).
-- **Equal-power zone blending** — parallel NAM processing with `cos`/`sin` crossfade, no midpoint sag.
-- **Automatic loudness compensation** — every loaded `.nam` profile is normalized to a target of −18 dB at load time. Modern profiles use the embedded loudness metadata; legacy profiles without metadata are auto-measured against a deterministic pink-noise calibration signal at the host's sample rate, so any third-party model you drop in plays at a consistent level.
+- **Constant-loudness zone blending** — parallel NAM processing with `cos`/`sin` crossfade plus a perceptual make-up that compensates the harmonic-density dip at the midpoint, so sliding the dial across a zone boundary never thins the volume.
+- **Automatic loudness compensation** — every loaded `.nam` profile is normalized to a target of −12 dBFS at load time. Modern profiles use the embedded loudness metadata; legacy profiles without metadata are auto-measured against a deterministic pink-noise calibration signal at the host's sample rate, so any third-party model you drop in plays at a consistent level.
 - **Cabinet IR per zone** — `juce::dsp::Convolution` correctly prepared at the host's sample rate before the IR is committed.
 - **In-memory model loading** — `.nam` files are parsed straight from binary resources via `nlohmann::json`, no temp-file roundtrip (which silently fails inside the AU sandbox).
 - **Vintage analog UI** — walnut & brass aesthetic with VU meter, because tone starts with the eyes.
@@ -124,7 +124,7 @@ Drop your files, rebuild, and you've got a completely different amp collection �
 | Class | Role |
 |---|---|
 | `Timbro` (`PluginProcessor`) | Main `juce::AudioProcessor`. Owns `ZoneBlender`, the noise gate, and APVTS parameters (dial 0–10, input/output gain, bypass). |
-| `ZoneBlender` | Holds 5 `NAMEngine` + 5 `IRLoader` instances. Computes the active zone pair and blend factor from the dial value, runs both engines in parallel, mixes them with equal-power gains, then runs the IR cabinet. |
+| `ZoneBlender` | Holds 5 `NAMEngine` + 5 `IRLoader` instances. Computes the active zone pair and blend factor from the dial value, runs both engines in parallel, mixes them with an equal-power crossfade plus a `sin(t·π)` perceptual make-up that keeps midpoint loudness flat, then runs the IR cabinet. |
 | `NAMEngine` | Wraps `nam::DSP`. Parses `.nam` JSON from memory, applies loudness compensation, and processes mono audio. |
 | `IRLoader` | Wraps `juce::dsp::Convolution`. Defers IR commit to `prepare()` so the convolver is correctly initialized at the host sample rate. |
 | `TimbroEditor` (`PluginEditor`) | UI with vintage 60s/70s studio gear aesthetic, hosting the main dial, zone label, input/output knobs, bypass, and decorative VU meter. |
