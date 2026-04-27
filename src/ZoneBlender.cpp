@@ -116,15 +116,17 @@ void ZoneBlender::process(juce::AudioBuffer<float>& buffer, float dialValue)
         if (irLoaders[idxB].isLoaded())
             irLoaders[idxB].process(tempBufferB.getWritePointer(0), numSamples);
 
-        // Equal-power (constant-power) crossfade: gainA = cos(t·π/2),
-        // gainB = sin(t·π/2). Two NAM models trained on different amps
-        // produce mostly uncorrelated harmonic content, so a linear
-        // amplitude crossfade would sag by ~3 dB at the midpoint
-        // (a*0.5 + b*0.5 sums to 0.707 in power for uncorrelated sources).
-        // sin/cos summed in quadrature keep the perceived level flat.
+        // Equal-power crossfade (cos/sin) keeps RMS flat for uncorrelated
+        // sources, but two NAM amps processing the same guitar share part
+        // of the signal — partial correlation plus the drop in harmonic
+        // density at the midpoint produces a perceived volume dip.
+        // Compensate with a sin(t·π) make-up that is unity at the edges
+        // and adds ~1.5 dB at the centre of the blend, where the dip is
+        // strongest. 0.189 ≈ 10^(1.5/20) − 1.
         const float angle = blendFactor * juce::MathConstants<float>::halfPi;
-        const float gainA = std::cos(angle);
-        const float gainB = std::sin(angle);
+        const float makeup = 1.0f + 0.189f * std::sin(blendFactor * juce::MathConstants<float>::pi);
+        const float gainA = std::cos(angle) * makeup;
+        const float gainB = std::sin(angle) * makeup;
 
         const float* aData = tempBufferA.getReadPointer(0);
         const float* bData = tempBufferB.getReadPointer(0);
