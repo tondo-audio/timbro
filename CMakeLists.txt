@@ -136,6 +136,17 @@ target_link_libraries(Timbro
         juce::juce_recommended_warning_flags
 )
 
+# JUCE 8 on Linux still emits libcurl symbol references from juce_core.cpp
+# even when JUCE_USE_CURL=0 is defined on the plugin target — the macro
+# does not propagate cleanly into the JUCE module's translation unit
+# under the current module structure. Linking libcurl resolves the
+# undefined references; on macOS (CFNetwork) and Windows (WinINet) JUCE
+# does not touch curl, so this stays Linux-only.
+if(UNIX AND NOT APPLE)
+    find_package(CURL REQUIRED)
+    target_link_libraries(Timbro PRIVATE CURL::libcurl)
+endif()
+
 # Link NeuralAmpModelerCore.
 #
 # We wrap NAM's sources in a dedicated static archive and force-load it.
