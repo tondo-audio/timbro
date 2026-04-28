@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.22)
 project(Timbro VERSION 1.0.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# C++20 is required because NAM's slimmable wavenet uses
+# std::atomic<std::shared_ptr<T>>, a C++20 addition. libc++/libstdc++
+# tolerate it as an extension under -std=c++17, but MSVC's STL strictly
+# rejects it via static_assert, breaking the Windows build.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # --- Dependencies via CPM ---
@@ -18,10 +22,15 @@ CPMAddPackage(
 )
 
 # NeuralAmpModelerCore
+# EXCLUDE_FROM_ALL keeps NAM's auxiliary tools (benchmodel, render) out
+# of the default build. They use GCC-only flags like -Wno-error that
+# MSVC rejects with D8021, and we don't link against them anyway —
+# we glob NAM/*.cpp ourselves into timbro_nam_core below.
 CPMAddPackage(
     NAME NeuralAmpModelerCore
     GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
     GIT_TAG main
+    EXCLUDE_FROM_ALL YES
 )
 
 # Eigen (required by NeuralAmpModelerCore) - header-only, skip full configure
@@ -151,7 +160,7 @@ else()
         ${NeuralAmpModelerCore_SOURCE_DIR}/Dependencies
         ${Eigen_SOURCE_DIR}
     )
-    target_compile_features(timbro_nam_core PUBLIC cxx_std_17)
+    target_compile_features(timbro_nam_core PUBLIC cxx_std_20)
     target_compile_definitions(timbro_nam_core PUBLIC NAM_SAMPLE_FLOAT=1)
     set_target_properties(timbro_nam_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
