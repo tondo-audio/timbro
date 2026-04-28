@@ -2,57 +2,118 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: macOS
+          - os: windows-latest
+            platform: Windows
+          - os: ubuntu-latest
+            platform: Linux
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            libcurl4-openssl-dev libfreetype-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCPM_SOURCE_CACHE=$HOME/.cache/CPM
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+        run: cmake --build build --config Release --parallel
 
-      - name: Package
-        id: package
+      - name: Package macOS
+        if: runner.os == 'macOS'
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          STAGE="$RUNNER_TEMP/stage"
-          mkdir -p "$STAGE"
-          # ditto preserves bundle structure, symlinks, and resource forks —
-          # plain `zip` can mangle .component bundles on macOS.
+          mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent \
             build/Timbro_artefacts/Release/AU/Timbro.component \
-            "$STAGE/Timbro-${VERSION}-macOS.zip"
-          echo "zip=$STAGE/Timbro-${VERSION}-macOS.zip" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            "dist/Timbro-${GITHUB_REF_NAME}-macOS-AU.zip"
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Timbro_artefacts/Release/VST3/Timbro.vst3 \
+            "dist/Timbro-${GITHUB_REF_NAME}-macOS-VST3.zip"
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive `
+            -Path build/Timbro_artefacts/Release/VST3/Timbro.vst3, build/Timbro_artefacts/Release/Standalone/Timbro.exe `
+            -DestinationPath "dist/Timbro-$env:GITHUB_REF_NAME-Windows.zip"
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist
+          cd build/Timbro_artefacts/Release
+          zip -r "$GITHUB_WORKSPACE/dist/Timbro-${GITHUB_REF_NAME}-Linux.zip" \
+            VST3/Timbro.vst3 Standalone/Timbro
+
+      - uses: actions/upload-artifact@v4
         with:
-          files: ${{ steps.package.outputs.zip }}
-          name: Timbro ${{ steps.package.outputs.version }}
+          name: dist-${{ matrix.platform }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          name: Timbro ${{ github.ref_name }}
           body: |
             ## Install
 
-            1. Download `Timbro-${{ steps.package.outputs.version }}-macOS.zip` below and unzip it.
-            2. Move `Timbro.component` to `~/Library/Audio/Plug-Ins/Components/`.
-            3. **Logic Pro / GarageBand only** — allow unsigned Audio Units (one-time, run in Terminal):
+            ### macOS
+            1. Scarica `Timbro-${{ github.ref_name }}-macOS-AU.zip` o `-VST3.zip` ed estrai.
+            2. Sposta `Timbro.component` in `~/Library/Audio/Plug-Ins/Components/`, oppure `Timbro.vst3` in `~/Library/Audio/Plug-Ins/VST3/`.
+            3. **Logic Pro / GarageBand (AU)** — abilita unsigned AU una sola volta:
                ```
                defaults write com.apple.Logic10 DoNotValidateAudioUnits -bool YES
                ```
-            4. Restart your DAW. Timbro appears under **Tondo Audio**.
+            4. Riavvia il DAW. Timbro appare sotto **Tondo Audio**.
 
-            > Timbro is currently distributed unsigned, so it loads only in DAWs that allow unsigned AUs (Logic Pro and GarageBand with the flag above). Other AU hosts that enforce strict validation will reject it.
+            ### Windows
+            1. Scarica `Timbro-${{ github.ref_name }}-Windows.zip` ed estrai.
+            2. Copia `Timbro.vst3` in `C:\Program Files\Common Files\VST3\`.
+            3. `Timbro.exe` è la versione standalone — lanciabile direttamente.
 
-            ## Requirements
+            ### Linux
+            1. Scarica `Timbro-${{ github.ref_name }}-Linux.zip` ed estrai.
+            2. Copia `Timbro.vst3` in `~/.vst3/` (utente) o `/usr/lib/vst3/` (system-wide).
+            3. `Timbro` è lo standalone (richiede ALSA o JACK).
 
-            - macOS 12 or newer (Apple Silicon or Intel)
-            - An AU host that accepts unsigned plugins
+            ## Requisiti
+
+            - macOS 12+ (Apple Silicon o Intel)
+            - Windows 10+ (x64)
+            - Linux x86_64 con ALSA/JACK + X11
+
+            > Distribuito non firmato. Su macOS solo host che accettano unsigned AU (Logic, GarageBand con flag, REAPER VST3). Su Windows SmartScreen può chiedere conferma manuale.

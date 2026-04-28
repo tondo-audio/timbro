@@ -40,11 +40,18 @@ CPMAddPackage(
 )
 
 # --- Plugin Target ---
+# Plugin formats: AU only on Apple, VST3+Standalone everywhere.
+if(APPLE)
+    set(TIMBRO_FORMATS AU VST3 Standalone)
+else()
+    set(TIMBRO_FORMATS VST3 Standalone)
+endif()
+
 juce_add_plugin(Timbro
     COMPANY_NAME "Tondo Audio"
     PLUGIN_MANUFACTURER_CODE TmbR
     PLUGIN_CODE Tmb1
-    FORMATS AU Standalone
+    FORMATS ${TIMBRO_FORMATS}
     PRODUCT_NAME "Timbro"
     BUNDLE_ID "audio.tondo.timbro"
     IS_SYNTH FALSE
@@ -155,12 +162,19 @@ else()
     if(APPLE)
         target_link_options(timbro_nam_core INTERFACE
             "LINKER:-force_load,$<TARGET_FILE:timbro_nam_core>")
+    elseif(MSVC)
+        # MSVC: /WHOLEARCHIVE:<libname> preserves all .obj members of a
+        # static archive, mirroring -force_load on Apple ld and
+        # --whole-archive on GNU ld. Reference by target name; the linker
+        # resolves it from the library search paths CMake already passes.
+        target_link_options(timbro_nam_core INTERFACE
+            "LINKER:/WHOLEARCHIVE:timbro_nam_core")
     elseif(UNIX)
         target_link_options(timbro_nam_core INTERFACE
             "LINKER:--whole-archive,$<TARGET_FILE:timbro_nam_core>,--no-whole-archive")
     else()
-        message(FATAL_ERROR "Timbro is currently macOS-only; force-loading "
-                "the NAM static archive on this platform is not configured.")
+        message(FATAL_ERROR "Unsupported platform for NAM force-load: "
+                "no equivalent of -force_load / /WHOLEARCHIVE configured.")
     endif()
     target_link_libraries(Timbro PRIVATE timbro_nam_core)
 endif()

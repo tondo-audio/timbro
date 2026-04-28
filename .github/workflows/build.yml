@@ -1,4 +1,4 @@
-name: Build AU Plugin
+name: Build Plugin
 
 on:
   push:
@@ -8,18 +8,50 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            artifact-name: Timbro-macOS
+            artifact-path: |
+              build/Timbro_artefacts/Release/AU/Timbro.component
+              build/Timbro_artefacts/Release/VST3/Timbro.vst3
+          - os: windows-latest
+            artifact-name: Timbro-Windows
+            artifact-path: |
+              build/Timbro_artefacts/Release/VST3/Timbro.vst3
+              build/Timbro_artefacts/Release/Standalone/Timbro.exe
+          - os: ubuntu-latest
+            artifact-name: Timbro-Linux
+            artifact-path: |
+              build/Timbro_artefacts/Release/VST3/Timbro.vst3
+              build/Timbro_artefacts/Release/Standalone/Timbro
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev libjack-jackd2-dev \
+            libcurl4-openssl-dev libfreetype-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCPM_SOURCE_CACHE=$HOME/.cache/CPM
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCPM_SOURCE_CACHE=${{ github.workspace }}/.cpm-cache
 
       - name: Build
-        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+        run: cmake --build build --config Release --parallel
 
-      - name: Upload AU Plugin
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Timbro-AU
-          path: build/Timbro_artefacts/Release/AU/Timbro.component
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
