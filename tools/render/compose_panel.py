@@ -36,7 +36,7 @@ WIN_H = 280
 # =============================================================================
 
 # Title band — single line "Timbro" at top, no subtitle
-LOGO_Y = 42
+LOGO_Y = 58
 
 # Control row: 4 elements equally spaced, all centred on the same Y
 CTRL_DIAMETER = 156              # logical px (same for knobs and switch)
@@ -89,7 +89,7 @@ SCRIPT = "/System/Library/Fonts/Supplemental/SnellRoundhand.ttc"
 ARIAL_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 IMPACT = "/System/Library/Fonts/Supplemental/Impact.ttf"
 
-font_logo = load_font([SCRIPT], 30)        # logo at top of horizontal panel
+font_logo = load_font([SCRIPT], 56)        # logo at top of horizontal panel
 font_subtitle = load_font([ARIAL_BOLD], 7)
 font_label = load_font([ARIAL_BOLD], 11)
 font_scale = load_font([ARIAL_BOLD], 9)    # small numbers hugging the knob

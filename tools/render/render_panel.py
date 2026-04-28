@@ -13,6 +13,7 @@ import os
 import sys
 import math
 import bpy
+import bmesh
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -186,27 +187,44 @@ mat_screw = new_material("Screw")
 nt = clear_nodes(mat_screw)
 out = nt.nodes.new("ShaderNodeOutputMaterial")
 bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
-# Polished gold — warm, saturated, only mildly worn
-bsdf.inputs["Base Color"].default_value = (0.92, 0.68, 0.20, 1.0)
+# Polished gold — warm, saturated, only mildly worn. Roughness intentionally
+# higher than a mirror finish so the diffuse body colour reads as gold instead
+# of being washed out by the bright HDRI specular reflection.
+bsdf.inputs["Base Color"].default_value = (0.95, 0.55, 0.10, 1.0)
 bsdf.inputs["Metallic"].default_value = 1.0
-bsdf.inputs["Roughness"].default_value = 0.28
+bsdf.inputs["Roughness"].default_value = 0.45
 nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
 
 
 def add_screw(x, y, head_radius=0.0080, head_depth=0.0022, slot_angle_deg=0.0):
-    """Phillips-head screw: cylindrical head with a real cross slot cut by booleans."""
+    """Phillips-head screw: domed cap with a real cross slot cut by booleans."""
     head_z = head_depth / 2 + 0.0005   # rest just above the wood
-    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=head_radius,
+    bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=head_radius,
                                          depth=head_depth, location=(x, y, head_z))
     head = bpy.context.active_object
     head.name = f"Screw_{x:.3f}_{y:.3f}"
 
-    # Boolean cutters for the cross slot — placed slightly above the head so the
-    # difference produces a recessed groove that catches shadow.
+    # Dome the top: inset the top face and raise the inset face along its
+    # normal. Combined with smooth shading + subsurf this turns the flat cap
+    # into a convex Phillips button — without this the head reads as concave
+    # because the cross slot cut into a flat disc looks like a depression.
+    DOME_RISE = head_depth * 0.55
+    bm = bmesh.new()
+    bm.from_mesh(head.data)
+    top_z = max(f.calc_center_median().z for f in bm.faces)
+    top_faces = [f for f in bm.faces if abs(f.calc_center_median().z - top_z) < 1e-5]
+    bmesh.ops.inset_region(bm, faces=top_faces,
+                            thickness=head_radius * 0.55, depth=DOME_RISE)
+    bm.to_mesh(head.data)
+    bm.free()
+    head.data.update()
+
+    # Boolean cutters for the cross slot — placed above the (now raised) dome
+    # centre so the difference produces a recessed groove that catches shadow.
     slot_l = head_radius * 1.6
     slot_w = head_radius * 0.20
     slot_h = head_depth * 0.55
-    z_cut = head_z + head_depth / 2 - slot_h * 0.30
+    z_cut = head_z + head_depth / 2 + DOME_RISE - slot_h * 0.30
     cutters = []
     for sx, sy in [(slot_l, slot_w), (slot_w, slot_l)]:
         bpy.ops.mesh.primitive_cube_add(size=1, location=(x, y, z_cut))
@@ -227,18 +245,30 @@ def add_screw(x, y, head_radius=0.0080, head_depth=0.0022, slot_angle_deg=0.0):
     for c in cutters:
         bpy.data.objects.remove(c)
 
-    # Round the head's outer rim so the silhouette catches a soft highlight
+    # Round the head's outer rim + subdivision surface to smooth the dome step
+    # into a continuous curve.
     bpy.ops.object.select_all(action="DESELECT")
     head.select_set(True)
     bpy.context.view_layer.objects.active = head
     bpy.ops.object.modifier_add(type="BEVEL")
     head.modifiers["Bevel"].width = 0.0005
     head.modifiers["Bevel"].segments = 3
+    bpy.ops.object.modifier_add(type="SUBSURF")
+    head.modifiers["Subdivision"].levels = 2
+    head.modifiers["Subdivision"].render_levels = 2
     bpy.ops.object.shade_smooth()
 
     # Random slot rotation per screw so they don't look identical
     head.rotation_euler.z = math.radians(slot_angle_deg)
+
+    # Boolean operations can leave behind empty material slots inherited from
+    # the (untextured) cutter cubes — without this cleanup, the screw faces
+    # default to slot 0 (None / default white) and our gold material is never
+    # actually applied.
+    head.data.materials.clear()
     head.data.materials.append(mat_screw)
+    for poly in head.data.polygons:
+        poly.material_index = 0
 
 
 # Inset matches compose_panel.py (~25 logical px from edge, on the wood)
