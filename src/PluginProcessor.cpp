@@ -45,7 +45,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Timbro::createParameterLayou
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"inputGain", 1}, "Input",
-        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f), 0.0f));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"outputGain", 1}, "Output",
