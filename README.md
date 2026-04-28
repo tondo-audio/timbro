@@ -54,7 +54,21 @@ Guitar In → Noise Gate → [NAM Zone A ⟷ NAM Zone B] → IR Cabinet → Outp
 - **Vintage analog UI** — walnut & brass aesthetic with VU meter, because tone starts with the eyes.
 - **Zero configuration** — every model is bundled. No download, no folder management, no cloud.
 
-## Build
+## Download
+
+Grab the latest pre-built plugin from the [Releases page](https://github.com/tondo-audio/timbro/releases/latest):
+
+1. Download `Timbro-vX.Y.Z-macOS.zip` and unzip it.
+2. Move `Timbro.component` to `~/Library/Audio/Plug-Ins/Components/`.
+3. **Logic Pro / GarageBand** — allow unsigned Audio Units (one-time):
+   ```bash
+   defaults write com.apple.Logic10 DoNotValidateAudioUnits -bool YES
+   ```
+4. Restart your DAW. Timbro appears under **Tondo Audio**.
+
+> Timbro ships unsigned, so it loads only in hosts that allow unsigned AUs (Logic Pro and GarageBand with the flag above). DAWs that enforce strict AU validation will reject it.
+
+## Build from source
 
 > Requires macOS 12+, CMake 3.22+, and a C++17 compiler.
 
@@ -64,13 +78,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
 
-The AU plugin is automatically installed to `~/Library/Audio/Plug-Ins/Components/Timbro.component`.
-
-**Logic Pro users** — to load unsigned Audio Units:
-
-```bash
-defaults write com.apple.Logic10 DoNotValidateAudioUnits -bool YES
-```
+The AU plugin is automatically installed to `~/Library/Audio/Plug-Ins/Components/Timbro.component`. Same unsigned-AU caveat as above — set the `DoNotValidateAudioUnits` flag for Logic.
 
 ## Verify the build
 

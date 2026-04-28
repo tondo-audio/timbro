@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCPM_SOURCE_CACHE=$HOME/.cache/CPM
+
+      - name: Build
+        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        id: package
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          STAGE="$RUNNER_TEMP/stage"
+          mkdir -p "$STAGE"
+          # ditto preserves bundle structure, symlinks, and resource forks —
+          # plain `zip` can mangle .component bundles on macOS.
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Timbro_artefacts/Release/AU/Timbro.component \
+            "$STAGE/Timbro-${VERSION}-macOS.zip"
+          echo "zip=$STAGE/Timbro-${VERSION}-macOS.zip" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.package.outputs.zip }}
+          name: Timbro ${{ steps.package.outputs.version }}
+          body: |
+            ## Install
+
+            1. Download `Timbro-${{ steps.package.outputs.version }}-macOS.zip` below and unzip it.
+            2. Move `Timbro.component` to `~/Library/Audio/Plug-Ins/Components/`.
+            3. **Logic Pro / GarageBand only** — allow unsigned Audio Units (one-time, run in Terminal):
+               ```
+               defaults write com.apple.Logic10 DoNotValidateAudioUnits -bool YES
+               ```
+            4. Restart your DAW. Timbro appears under **Tondo Audio**.
+
+            > Timbro is currently distributed unsigned, so it loads only in DAWs that allow unsigned AUs (Logic Pro and GarageBand with the flag above). Other AU hosts that enforce strict validation will reject it.
+
+            ## Requirements
+
+            - macOS 12 or newer (Apple Silicon or Intel)
+            - An AU host that accepts unsigned plugins
