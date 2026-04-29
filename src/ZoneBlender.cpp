@@ -92,6 +92,13 @@ void ZoneBlender::process(juce::AudioBuffer<float>& buffer, float dialValue)
     // NAM is mono: process channel 0 only, then replicate to other channels.
     float* ch0 = buffer.getWritePointer(0);
 
+    // Sum any extra input channels into ch0 so a guitar plugged into the
+    // right side of a stereo bus (e.g. AIR 192|4 input 2) still reaches
+    // NAM. For a true stereo source this collapses to mono, which is the
+    // expected feed for an amp sim anyway.
+    for (int ch = 1; ch < numChannels; ++ch)
+        juce::FloatVectorOperations::add(ch0, buffer.getReadPointer(ch), numSamples);
+
     if (blendFactor < 0.001f)
     {
         // Pure zone A: NAM then IR, each gracefully skipped if not ready.
