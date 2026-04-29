@@ -2,6 +2,7 @@
 #include "PluginProcessor.h"
 #include "ZoneBlender.h"
 #include "BinaryData.h"
+#include "timbro_version.h"
 
 #include <array>
 #include <cmath>

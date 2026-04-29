@@ -1,32 +1,19 @@
 cmake_minimum_required(VERSION 3.22)
 
 # --- Version derived from git ---
-# TIMBRO_VERSION:           strict X[.Y[.Z]] taken from the latest tag, used
-#                           for the project() VERSION (and therefore for
-#                           JucePlugin_VersionString / plugin metadata).
-# TIMBRO_DISPLAY_VERSION:   the full `git describe --tags --dirty` output
-#                           with a leading "v" stripped, exposed to the UI
-#                           via a compile definition. On a clean tagged
-#                           commit it equals the tag (e.g. "0.3.1"); on a
-#                           dev checkout it carries commit count + dirty
-#                           marker (e.g. "0.3.1-5-gabc123-dirty"), which
-#                           makes "is this a real release?" obvious at a
-#                           glance in the bottom-right of the editor.
+# TIMBRO_VERSION (numeric X[.Y[.Z]]) seeds project() VERSION and is read
+# from the latest tag at configure time — that's fine because it only
+# changes when a release is cut. The editor's display stamp is handled
+# separately by cmake/GenerateVersion.cmake (see below), which runs at
+# every build so a `cmake --build` after a commit reflects the new SHA
+# without needing a fresh configure.
 set(TIMBRO_VERSION "0.0.0")
-set(TIMBRO_DISPLAY_VERSION "dev")
 find_program(GIT_EXECUTABLE git)
 if(GIT_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
     execute_process(
         COMMAND ${GIT_EXECUTABLE} describe --tags --abbrev=0
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         OUTPUT_VARIABLE GIT_LATEST_TAG
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-        RESULT_VARIABLE GIT_TAG_RESULT)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        OUTPUT_VARIABLE GIT_DESCRIBE
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET)
     if(GIT_LATEST_TAG)
@@ -37,11 +24,8 @@ if(GIT_EXECUTABLE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
             set(TIMBRO_VERSION "${GIT_NUMERIC}")
         endif()
     endif()
-    if(GIT_DESCRIBE)
-        string(REGEX REPLACE "^v" "" TIMBRO_DISPLAY_VERSION "${GIT_DESCRIBE}")
-    endif()
 endif()
-message(STATUS "Timbro version: ${TIMBRO_VERSION} (display: ${TIMBRO_DISPLAY_VERSION})")
+message(STATUS "Timbro project version: ${TIMBRO_VERSION}")
 
 project(Timbro VERSION ${TIMBRO_VERSION} LANGUAGES C CXX)
 
@@ -166,8 +150,24 @@ target_compile_definitions(Timbro PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
     NAM_SAMPLE_FLOAT=1
-    TIMBRO_DISPLAY_VERSION="${TIMBRO_DISPLAY_VERSION}"
 )
+
+# --- Generated version header (regenerated at every build) ---
+# The editor's bottom-right stamp pulls TIMBRO_DISPLAY_VERSION from this
+# header. Running git describe via a custom_target keeps the stamp in
+# sync with the working-tree state at every `cmake --build`, instead of
+# being frozen at the last `cmake -B build`.
+set(TIMBRO_VERSION_HEADER ${CMAKE_BINARY_DIR}/timbro_version.h)
+add_custom_target(timbro_version ALL
+    BYPRODUCTS ${TIMBRO_VERSION_HEADER}
+    COMMAND ${CMAKE_COMMAND}
+        -DGIT_EXECUTABLE=${GIT_EXECUTABLE}
+        -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+        -DOUTPUT_FILE=${TIMBRO_VERSION_HEADER}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateVersion.cmake
+    COMMENT "Refreshing Timbro version header from git")
+add_dependencies(Timbro timbro_version)
+target_include_directories(Timbro PRIVATE ${CMAKE_BINARY_DIR})
 
 # --- Link Libraries ---
 # NOTE: juce_recommended_lto_flags is intentionally NOT included. The real
