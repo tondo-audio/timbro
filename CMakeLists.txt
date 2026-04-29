@@ -70,6 +70,8 @@ juce_add_plugin(Timbro
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD TRUE
     AU_MAIN_TYPE "kAudioUnitType_Effect"
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "Timbro needs audio input access to process your guitar signal."
     DESCRIPTION "Neural Amp Modeler with One Dial"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/timbro_icon.png"
     ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/timbro_icon.png"
