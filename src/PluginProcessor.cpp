@@ -11,6 +11,7 @@ Timbro::Timbro()
     dialParam = apvts.getRawParameterValue("dial");
     inputGainParam = apvts.getRawParameterValue("inputGain");
     outputGainParam = apvts.getRawParameterValue("outputGain");
+    gateThresholdParam = apvts.getRawParameterValue("gateThreshold");
     bypassParam = apvts.getRawParameterValue("bypass");
 
     // Load NAM profiles from binary resources. NAMEngine::loadModel now
@@ -51,6 +52,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Timbro::createParameterLayou
         juce::ParameterID{"outputGain", 1}, "Output",
         juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
 
+    // Gate threshold: -100 dB is treated as "OFF" by processBlock (the
+    // gate is bypassed entirely); -20 dB is aggressive enough to clamp
+    // most pickup hum on its own.
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"gateThreshold", 1}, "Gate",
+        juce::NormalisableRange<float>(-100.0f, -20.0f, 0.5f), -60.0f));
+
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID{"bypass", 1}, "Bypass", false));
 
@@ -67,10 +75,12 @@ void Timbro::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
     spec.numChannels = static_cast<juce::uint32>(getTotalNumInputChannels());
     noiseGate.prepare(spec);
-    noiseGate.setThreshold(-60.0f);
     noiseGate.setRatio(10.0f);
     noiseGate.setAttack(1.0f);
     noiseGate.setRelease(50.0f);
+    // Force the next processBlock to push the parameter value into the
+    // gate, regardless of what the previous instance's cache held.
+    lastGateThresholdDb = 1.0f;
 }
 
 void Timbro::releaseResources()
@@ -113,11 +123,40 @@ void Timbro::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
         buffer.applyGain(inputGainLinear);
     }
 
-    // Noise gate (before NAM processing)
+    // Sample input level (post-gain, pre-gate) for the editor's IN meter.
+    // Average across channels so a guitar plugged into one side of a
+    // stereo bus still registers, instead of reading 0 on channel 0.
     {
+        float sum = 0.0f;
+        const int numCh = buffer.getNumChannels();
+        const int numSamples = buffer.getNumSamples();
+        for (int ch = 0; ch < numCh; ++ch)
+            sum += buffer.getRMSLevel(ch, 0, numSamples);
+        inputLevel.store(numCh > 0 ? sum / (float) numCh : 0.0f);
+    }
+
+    // Noise gate (before NAM processing). At the bottom of the range we
+    // skip the gate entirely so the "OFF" position is truly bypassed
+    // rather than just a very low threshold that could still attenuate
+    // signal floor.
+    const float gateThresholdDb = gateThresholdParam->load();
+    if (gateThresholdDb > -99.5f)
+    {
+        if (gateThresholdDb != lastGateThresholdDb)
+        {
+            noiseGate.setThreshold(gateThresholdDb);
+            lastGateThresholdDb = gateThresholdDb;
+        }
         juce::dsp::AudioBlock<float> block(buffer);
         juce::dsp::ProcessContextReplacing<float> context(block);
         noiseGate.process(context);
+    }
+    else
+    {
+        // Reset the envelope so that re-engaging the gate doesn't open
+        // mid-decay from a stale internal state.
+        noiseGate.reset();
+        lastGateThresholdDb = 1.0f;
     }
 
     // Process through NAM zone blender
@@ -130,12 +169,10 @@ void Timbro::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
         buffer.applyGain(outputGainLinear);
     }
 
-    // Update output levels for VU meter
-    outputLevelLeft.store(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-    if (buffer.getNumChannels() > 1)
-        outputLevelRight.store(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
-    else
-        outputLevelRight.store(outputLevelLeft.load());
+    // Update mono output level for the editor's OUT meter. NAM is mono
+    // and the result is replicated across channels, so any single channel
+    // is representative.
+    outputLevel.store(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
 }
 
 juce::AudioProcessorEditor* Timbro::createEditor()

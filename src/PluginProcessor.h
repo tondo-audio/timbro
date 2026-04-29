@@ -35,9 +35,12 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
-    // Output level for VU meter (thread-safe read from UI)
-    float getOutputLevelLeft() const { return outputLevelLeft.load(); }
-    float getOutputLevelRight() const { return outputLevelRight.load(); }
+    // Mono RMS levels for the editor's small in/out meters (thread-safe).
+    // Input is sampled after the input gain (so the meter shows what's
+    // actually being fed into NAM); output is sampled at the very end of
+    // processBlock, after output gain.
+    float getInputLevel() const { return inputLevel.load(); }
+    float getOutputLevel() const { return outputLevel.load(); }
 
 private:
     juce::AudioProcessorValueTreeState apvts;
@@ -52,11 +55,16 @@ private:
     std::atomic<float>* dialParam = nullptr;
     std::atomic<float>* inputGainParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
+    std::atomic<float>* gateThresholdParam = nullptr;
     std::atomic<float>* bypassParam = nullptr;
 
-    // Output levels for VU meter
-    std::atomic<float> outputLevelLeft{0.0f};
-    std::atomic<float> outputLevelRight{0.0f};
+    // Last threshold pushed into the gate, so we only call setThreshold()
+    // when the user actually moves the knob.
+    float lastGateThresholdDb = 1.0f;
+
+    // Mono RMS sampled per processBlock; the editor smooths/decays for display.
+    std::atomic<float> inputLevel{0.0f};
+    std::atomic<float> outputLevel{0.0f};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Timbro)
 };

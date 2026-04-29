@@ -9,35 +9,52 @@
 
 namespace
 {
-    // ---- Layout (window 720x280) ------------------------------------------
-    constexpr int kWindowW       = 720;
-    constexpr int kWindowH       = 280;
+    // ---- Layout (window 520x440, vertical stack) --------------------------
+    // Top:    title row with BYPASS pill on the right.
+    // Middle: VOICE big knob, label above, ZoneIndicator below.
+    // Bottom: INPUT / GATE / OUTPUT row of small knobs.
+    constexpr int kWindowW       = 520;
+    constexpr int kWindowH       = 460;
 
     // VOICE is the heart of Timbro — bigger than the trim controls to
     // establish visual hierarchy (the eye lands here first).
-    constexpr int kKnobDiameter      = 95;
-    constexpr int kVoiceKnobDiameter = 140;
-    constexpr int kBypassW           = 80;
-    constexpr int kBypassH           = 40;
+    constexpr int kSmallKnobDiameter = 70;
+    constexpr int kVoiceKnobDiameter = 150;
+    constexpr int kBypassW           = 64;
+    constexpr int kBypassH           = 26;
 
-    constexpr int kCtrlRowCY     = 160;
-    constexpr int kBypassCX      = 105;
-    constexpr int kInputCX       = 275;
-    constexpr int kOutputCX      = 445;
-    constexpr int kVoiceCX       = 615;
+    // --- Title bar ---
+    constexpr int kTitleY        = 14;
+    constexpr int kTitleH        = 26;
+    constexpr int kBypassCY      = 27;            // centred on the title row
+    constexpr int kBypassRightX  = kWindowW - 24; // right-edge anchor
+    constexpr int kDividerY      = 52;
 
-    constexpr int kTitleY        = 12;
-    constexpr int kTitleH        = 28;
-    constexpr int kDividerY      = 50;
-    constexpr int kLabelTopY     = 64;
+    // --- VOICE area ---
     constexpr int kLabelH        = 16;
-
-    constexpr int kValueReadoutY = 218;
-    constexpr int kValueReadoutH = 14;
-
-    constexpr int kZoneStripW    = 130;
-    constexpr int kZoneStripY    = 240;
+    constexpr int kVoiceCX       = kWindowW / 2;
+    constexpr int kVoiceCY       = 158;
+    constexpr int kZoneStripW    = 160;
+    constexpr int kZoneStripY    = 244;
     constexpr int kZoneStripH    = 36;
+
+    // --- Trim row (INPUT / GATE / OUTPUT) ---
+    constexpr int kTrimDividerY  = 296;
+    constexpr int kTrimLabelY    = 308;
+    constexpr int kTrimRowCY     = 360;
+    constexpr int kTrimReadoutY  = 408;
+    constexpr int kTrimReadoutH  = 14;
+
+    constexpr int kMeterY        = 428;
+    constexpr int kMeterH        = 6;
+    constexpr int kMeterW        = 88;
+
+    // Three knobs centred on the window with equal spacing (kInputCX,
+    // kVoiceCX, kOutputCX form an arithmetic progression).
+    constexpr int kTrimSpread    = 140; // distance between adjacent knobs
+    constexpr int kInputCX       = kWindowW / 2 - kTrimSpread;
+    constexpr int kGateCX        = kWindowW / 2;
+    constexpr int kOutputCX      = kWindowW / 2 + kTrimSpread;
 
     // ---- Palette: warm-dark, Surge-inspired -------------------------------
     const juce::Colour kBgColour       (0xff1a1612);
@@ -51,18 +68,11 @@ namespace
     const juce::Colour kTitleColour    (0xffede0c8);
     const juce::Colour kIndicator      (0xffd9ccb8);
 
-    juce::Rectangle<int> knobBounds(int cx, int diameter)
+    juce::Rectangle<int> knobBounds(int cx, int cy, int diameter)
     {
         return { cx - diameter / 2,
-                 kCtrlRowCY - diameter / 2,
+                 cy - diameter / 2,
                  diameter, diameter };
-    }
-
-    juce::Rectangle<int> bypassBounds(int cx)
-    {
-        return { cx - kBypassW / 2,
-                 kCtrlRowCY - kBypassH / 2,
-                 kBypassW, kBypassH };
     }
 
     juce::Typeface::Ptr getInterBoldTypeface()
@@ -209,6 +219,56 @@ void TimbroLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& 
 
 
 // =============================================================================
+// LevelMeter
+// =============================================================================
+
+LevelMeter::LevelMeter(std::function<float()> levelFn)
+    : getLevel(std::move(levelFn))
+{
+    setInterceptsMouseClicks(false, false);
+    startTimerHz(30);
+}
+
+LevelMeter::~LevelMeter() = default;
+
+void LevelMeter::timerCallback()
+{
+    const float current = getLevel ? getLevel() : 0.0f;
+    // Peak-and-decay: jump up immediately, fall back at ~150ms half-life
+    // so the bar reads cleanly without strobing per buffer.
+    if (current > displayLevel)
+        displayLevel = current;
+    else
+        displayLevel *= 0.88f;
+    repaint();
+}
+
+void LevelMeter::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat();
+    const float corner = bounds.getHeight() * 0.5f;
+
+    g.setColour(kKnobTrack);
+    g.fillRoundedRectangle(bounds, corner);
+
+    // Map linear RMS → dB with a -60..0 dB display window. Below -60
+    // the bar is empty; above 0 it pegs.
+    const float db = juce::Decibels::gainToDecibels(displayLevel, -60.0f);
+    const float norm = juce::jlimit(0.0f, 1.0f,
+                                    juce::jmap(db, -60.0f, 0.0f, 0.0f, 1.0f));
+    if (norm > 0.001f)
+    {
+        auto fill = bounds.withWidth(bounds.getWidth() * norm);
+        // Tint hot-warm above ~-6 dB so the user gets a visual hint
+        // before clipping; otherwise stick to the brand accent.
+        const auto col = (norm > 0.85f) ? juce::Colour(0xffe04a2a) : kAccent;
+        g.setColour(col);
+        g.fillRoundedRectangle(fill, corner);
+    }
+}
+
+
+// =============================================================================
 // ZoneIndicator
 // =============================================================================
 
@@ -282,6 +342,8 @@ void ZoneIndicator::paint(juce::Graphics& g)
 TimbroEditor::TimbroEditor(Timbro& p)
     : juce::AudioProcessorEditor(&p),
       processor(p),
+      inputMeter([&p] { return p.getInputLevel(); }),
+      outputMeter([&p] { return p.getOutputLevel(); }),
       zoneIndicator(p.getAPVTS())
 {
     setSize(kWindowW, kWindowH);
@@ -295,6 +357,7 @@ TimbroEditor::TimbroEditor(Timbro& p)
     };
 
     configureKnob(inputKnob);
+    configureKnob(gateKnob);
     configureKnob(outputKnob);
     configureKnob(voiceKnob);
     voiceKnob.setComponentID("voice");
@@ -313,6 +376,7 @@ TimbroEditor::TimbroEditor(Timbro& p)
     };
 
     configureValueLabel(inputValueLabel);
+    configureValueLabel(gateValueLabel);
     configureValueLabel(outputValueLabel);
 
     auto formatDb = [](double v) -> juce::String
@@ -326,17 +390,29 @@ TimbroEditor::TimbroEditor(Timbro& p)
     outputKnob.onValueChange = [this, formatDb] {
         outputValueLabel.setText(formatDb(outputKnob.getValue()), juce::dontSendNotification);
     };
+    // The bottom of the gate range is a true bypass — show "OFF" rather
+    // than "-100.0 dB" so the user knows the signal isn't being touched.
+    gateKnob.onValueChange = [this] {
+        const double v = gateKnob.getValue();
+        gateValueLabel.setText(v <= -99.5 ? juce::String("OFF")
+                                          : juce::String(v, 1) + " dB",
+                               juce::dontSendNotification);
+    };
 
     addAndMakeVisible(zoneIndicator);
+    addAndMakeVisible(inputMeter);
+    addAndMakeVisible(outputMeter);
 
     auto& apvts = processor.getAPVTS();
     inputAttachment  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "inputGain", inputKnob);
+    gateAttachment   = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "gateThreshold", gateKnob);
     outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "outputGain", outputKnob);
     voiceAttachment  = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, "dial", voiceKnob);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, "bypass", bypassButton);
 
     // Initial readout sync (attachments fire onValueChange after this).
     inputKnob.onValueChange();
+    gateKnob.onValueChange();
     outputKnob.onValueChange();
 }
 
@@ -349,29 +425,34 @@ void TimbroEditor::paint(juce::Graphics& g)
 {
     g.fillAll(kBgColour);
 
+    // Title (left-aligned so BYPASS pill sits on the right of the same row).
     g.setColour(kTitleColour);
     g.setFont(makeUiFont(22.0f, 0.18f));
     g.drawText("TIMBRO",
-               juce::Rectangle<int>(0, kTitleY, kWindowW, kTitleH),
-               juce::Justification::centred);
+               juce::Rectangle<int>(24, kTitleY, kWindowW - 48, kTitleH),
+               juce::Justification::centredLeft);
 
+    // Top divider, full-width minus side margins.
     g.setColour(kPanelDivider);
-    g.fillRect(juce::Rectangle<float>(60.0f, (float) kDividerY,
-                                       (float) (kWindowW - 120), 1.0f));
+    g.fillRect(juce::Rectangle<float>(24.0f, (float) kDividerY,
+                                       (float) (kWindowW - 48), 1.0f));
 
+    // Divider between the VOICE area and the trim row.
+    g.setColour(kPanelDivider);
+    g.fillRect(juce::Rectangle<float>(24.0f, (float) kTrimDividerY,
+                                       (float) (kWindowW - 48), 1.0f));
+
+    // Trim-row labels (smaller / less prominent than VOICE).
     g.setColour(kLabelColour);
-    g.setFont(makeUiFont(11.0f, 0.12f));
-
-    const std::array<std::pair<int, const char*>, 4> labels = {{
-        { kBypassCX, "BYPASS" },
+    g.setFont(makeUiFont(10.0f, 0.14f));
+    const std::array<std::pair<int, const char*>, 3> trimLabels = {{
         { kInputCX,  "INPUT"  },
-        { kOutputCX, "OUTPUT" },
-        { kVoiceCX,  "VOICE"  }
+        { kGateCX,   "GATE"   },
+        { kOutputCX, "OUTPUT" }
     }};
-
-    for (auto& [cx, name] : labels)
+    for (auto& [cx, name] : trimLabels)
     {
-        juce::Rectangle<int> r(cx - 60, kLabelTopY, 120, kLabelH);
+        juce::Rectangle<int> r(cx - 60, kTrimLabelY, 120, kLabelH);
         g.drawText(name, r, juce::Justification::centred);
     }
 
@@ -387,15 +468,25 @@ void TimbroEditor::paint(juce::Graphics& g)
 
 void TimbroEditor::resized()
 {
-    bypassButton.setBounds(bypassBounds(kBypassCX));
-    inputKnob   .setBounds(knobBounds(kInputCX,  kKnobDiameter));
-    outputKnob  .setBounds(knobBounds(kOutputCX, kKnobDiameter));
-    voiceKnob   .setBounds(knobBounds(kVoiceCX,  kVoiceKnobDiameter));
+    bypassButton.setBounds(kBypassRightX - kBypassW,
+                           kBypassCY - kBypassH / 2,
+                           kBypassW, kBypassH);
 
-    inputValueLabel .setBounds(kInputCX  - 60, kValueReadoutY, 120, kValueReadoutH);
-    outputValueLabel.setBounds(kOutputCX - 60, kValueReadoutY, 120, kValueReadoutH);
+    voiceKnob.setBounds(knobBounds(kVoiceCX, kVoiceCY, kVoiceKnobDiameter));
 
     zoneIndicator.setBounds(kVoiceCX - kZoneStripW / 2,
                             kZoneStripY,
                             kZoneStripW, kZoneStripH);
+
+    inputKnob .setBounds(knobBounds(kInputCX,  kTrimRowCY, kSmallKnobDiameter));
+    gateKnob  .setBounds(knobBounds(kGateCX,   kTrimRowCY, kSmallKnobDiameter));
+    outputKnob.setBounds(knobBounds(kOutputCX, kTrimRowCY, kSmallKnobDiameter));
+
+    inputValueLabel .setBounds(kInputCX  - 60, kTrimReadoutY, 120, kTrimReadoutH);
+    gateValueLabel  .setBounds(kGateCX   - 60, kTrimReadoutY, 120, kTrimReadoutH);
+    outputValueLabel.setBounds(kOutputCX - 60, kTrimReadoutY, 120, kTrimReadoutH);
+
+    // GATE has no meter — only IN and OUT do.
+    inputMeter .setBounds(kInputCX  - kMeterW / 2, kMeterY, kMeterW, kMeterH);
+    outputMeter.setBounds(kOutputCX - kMeterW / 2, kMeterY, kMeterW, kMeterH);
 }
